@@ -51,6 +51,7 @@ export class Humano {
         const fio = /eyelash|eyebrow|short|long|bob|braid|afro|ponytail/i.test(m.name);
         m.transparent = false; m.depthWrite = true; m.opacity = 1;
         m.alphaTest = fio ? 0.45 : 0;
+        if (/^(roupa_|avental)/.test(x.name)) { m.polygonOffset = true; m.polygonOffsetFactor = -2; m.polygonOffsetUnits = -2; }
         if (!fio && /low-poly/i.test(m.name)) m.alphaTest = 0.5;
         if (!fio) m.side = THREE.FrontSide;
       }

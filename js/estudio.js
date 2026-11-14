@@ -168,6 +168,8 @@ export function construirEstudio(cena, qualidade) {
   const mercado = construirMercado(L, mk, raiz, interativos, colisores);
 
   raiz.add(lote.construir(true));
+  // Alvos invisíveis precisam estar na cena para a mira calcular a posição deles
+  for (const h of interativos) if (!h.parent) raiz.add(h);
 
   // Iluminação
   const hemi = new THREE.HemisphereLight(0xc8d4ff, 0x0a1030, 0.9); cena.add(hemi);

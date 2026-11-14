@@ -86,6 +86,7 @@ def criar(s):
         if c:
             c.name = "roupa_" + papel(r)
     base.name = "corpo"
+    erodir_mascara(base, aneis=3)
     if s["avental"]:
         avental(base, rig)
     return base, rig
@@ -116,6 +117,25 @@ def tira(nome, pontos, raio):
     bpy.ops.object.select_all(action="DESELECT"); ob.select_set(True); bpy.context.view_layer.objects.active = ob
     bpy.ops.object.convert(target="MESH")
     return bpy.context.view_layer.objects.active
+
+
+def erodir_mascara(base, aneis=3):
+    """Mantém uma faixa de pele sob as bordas da roupa: sem buraco quando o corpo se mexe."""
+    for g in base.vertex_groups:
+        if not any(m.type == "MASK" and m.vertex_group == g.name for m in base.modifiers):
+            continue
+        idx = g.index
+        apagar = {v.index for v in base.data.vertices if any(x.group == idx and x.weight > 0.5 for x in v.groups)}
+        viz = {}
+        for e in base.data.edges:
+            a, b = e.vertices
+            viz.setdefault(a, []).append(b); viz.setdefault(b, []).append(a)
+        for _ in range(aneis):
+            borda = {v for v in apagar if any(n not in apagar for n in viz.get(v, []))}
+            apagar -= borda
+        g.remove([v.index for v in base.data.vertices])
+        g.add(list(apagar), 1.0, "REPLACE")
+        print("mascara", g.name, len(apagar))
 
 
 def avental(base, rig):
@@ -255,7 +275,7 @@ def q_mundo(m):
     return m.to_3x3().normalized().to_quaternion()
 
 
-def retarget(tgt):
+def retarget(tgt, manter_fonte=False):
     bpy.ops.import_scene.gltf(filepath=ANIM_FONTE)
     src = next(o for o in bpy.context.selected_objects if o.type == "ARMATURE")
     for o in list(bpy.context.selected_objects):
@@ -330,9 +350,39 @@ def retarget(tgt):
                     pb.location = basis.to_translation()
                     pb.keyframe_insert("location", frame=fr)
         print("retarget", nova.name, f1 - f0 + 1, "quadros")
+    if manter_fonte:
+        return src, mapa
     bpy.data.objects.remove(src)
     for a in fontes:
         bpy.data.actions.remove(a)
+
+
+PARADAS = {"Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Interact", "PickUp_Table", "Spell_Simple_Idle_Loop", "Hit_Head", "Fixing_Kneeling", "Push_Loop"}
+NEUTROS = {"pelvis", "spine_01", "spine_02", "spine_03", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "ball_l", "ball_r"}
+
+
+def endireitar(rig):
+    """Animações paradas: quadril, coluna e pernas na postura neutra; braços e cabeça seguem animados."""
+    for a in bpy.data.actions:
+        if a.name not in PARADAS or a.name in ("Fixing_Kneeling",):
+            continue
+        f0, f1 = a.frame_range
+        for fc in list(a.fcurves):
+            osso = fc.data_path.split('"')[1] if '"' in fc.data_path else ""
+            if osso in NEUTROS:
+                a.fcurves.remove(fc)
+        for osso in NEUTROS:
+            if osso not in rig.pose.bones:
+                continue
+            caminho = f'pose.bones["{osso}"].rotation_quaternion'
+            for i, v in enumerate((1.0, 0.0, 0.0, 0.0)):
+                fc = a.fcurves.new(caminho, index=i, action_group=osso)
+                fc.keyframe_points.insert(f0, v); fc.keyframe_points.insert(f1, v)
+            if osso == "pelvis":
+                for i in range(3):
+                    fc = a.fcurves.new(f'pose.bones["pelvis"].location', index=i, action_group=osso)
+                    fc.keyframe_points.insert(f0, 0.0); fc.keyframe_points.insert(f1, 0.0)
+        print("endireitada", a.name)
 
 
 # ---------- Principal ----------
@@ -353,5 +403,37 @@ if not SO or "animacoes" in SO:
         bpy.data.objects.remove(o)
     bpy.context.scene.render.fps = 30
     retarget(rig)
+    endireitar(rig)
     exportar(os.path.join(SAIDA, "animacoes.glb"), [rig], animar=True)
     print("ok animacoes")
+
+
+if "diag" in SO:
+    limpar()
+    base, rig = criar(dict(id="ref", f=0, anos=30, raca="caucasian", peso=0.5, musc=0.5, alt=0.5, cabelo=None, roupas=[], avental=0))
+    for o in [o for o in bpy.data.objects if o.type == "MESH"]:
+        bpy.data.objects.remove(o)
+    bpy.context.scene.render.fps = 30
+    src, mapa = retarget(rig, manter_fonte=True)
+    endireitar(rig)
+    def pos(arm, nome):
+        return arm.matrix_world @ arm.pose.bones[nome].head
+    for clipe in ["Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Spell_Simple_Idle_Loop", "Interact", "PickUp_Table"]:
+        acs = [a for a in bpy.data.actions if a.name == clipe]
+        acf = [a for a in bpy.data.actions if a.name.startswith(clipe) and a.name != clipe]
+        rig.animation_data.action = acs[0]; src.animation_data.action = acf[0]
+        bpy.context.scene.frame_set(5)
+        hs = (pos(src, mapa["head"]) - pos(src, mapa["pelvis"])).length
+        ht = (pos(rig, "head") - pos(rig, "pelvis")).length
+        print("DIAG", clipe, "altura tronco src", round(hs, 3), "tgt", round(ht, 3))
+        fl = pos(rig, "foot_l") - pos(rig, "pelvis"); fr = pos(rig, "foot_r") - pos(rig, "pelvis"); ul = pos(rig, "upperarm_l"); ur = pos(rig, "upperarm_r")
+        print("POSE", clipe.ljust(24), "pés (frente/trás) %.2f" % ((fl.y - fr.y) / ht), "abertura %.2f" % ((fl.x - fr.x) / ht), "giro ombros %.0f°" % math.degrees(math.atan2(ul.y - ur.y, ul.x - ur.x)))
+        for b in []:
+            vs = (pos(src, mapa[b]) - pos(src, mapa["pelvis"])) / hs
+            vt = (pos(rig, b) - pos(rig, "pelvis")) / ht
+            print("DIAG", clipe, b.ljust(11), "src", tuple(round(x, 2) for x in vs), "tgt", tuple(round(x, 2) for x in vt), "dif", round((vs - vt).length, 2))
+    # rest
+    for b in ["pelvis", "spine_01", "spine_02", "spine_03", "neck_01", "head", "thigh_l", "calf_l", "upperarm_l", "lowerarm_l"]:
+        bs = src.data.bones[mapa[b]]; bt = rig.data.bones[b]
+        ds = (src.matrix_world.to_3x3() @ (bs.tail_local - bs.head_local)).normalized(); dt_ = (rig.matrix_world.to_3x3() @ (bt.tail_local - bt.head_local)).normalized()
+        print("REST", b.ljust(11), "src dir", tuple(round(x, 2) for x in ds), "tgt dir", tuple(round(x, 2) for x in dt_))

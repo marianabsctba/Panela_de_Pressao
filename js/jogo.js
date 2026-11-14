@@ -208,7 +208,9 @@ function aoMudarTrava(travado) {
 function jogando() { return !estado.pausado && !estado.overlay && jogador.travado; }
 
 function configurarEntrada() {
-  $('btn-jogar').addEventListener('click', comecar);
+  $('btn-jogar').addEventListener('click', () => comecar(false));
+  $('btn-continuar-jogo').addEventListener('click', () => comecar(true));
+  mostrarContinuar();
   $('btn-como').addEventListener('click', () => { $('menu').classList.add('oculto'); $('como').classList.remove('oculto'); });
   $('btn-voltar').addEventListener('click', () => { $('como').classList.add('oculto'); (estado.fase === 'menu' ? $('menu') : $('pausa')).classList.remove('oculto'); });
   $('btn-continuar').addEventListener('click', () => { $('pausa').classList.add('oculto'); estado.pausado = false; jogador.travar(); });
@@ -525,8 +527,36 @@ function npcsParaBancada() {
 }
 
 // ---------- Fluxo do programa ----------
-async function comecar() {
-  estado.nome = ($('nome-jogador').value || '').trim() || 'Chef sem nome';
+// ---------- Progresso salvo ----------
+const CHAVE_SAVE = 'pp4d_jogo';
+function lerSave() { try { const j = JSON.parse(localStorage.getItem(CHAVE_SAVE) || 'null'); return j && j.versao === 1 ? j : null; } catch (e) { return null; } }
+function gravarSave(proxima) {
+  const dado = { versao: 1, nome: estado.nome, proxima, fora: npcs.filter((n) => !n.vivo).map((n) => n.id), notas: Object.fromEntries(participantes.map((p) => [p.id, p.notas])), melhorNota: estado.melhorNota, quando: Date.now() };
+  try { localStorage.setItem(CHAVE_SAVE, JSON.stringify(dado)); msg('Progresso salvo. Pode fechar a aba sem culpa.', 'bom'); } catch (e) { /* navegador sem armazenamento */ }
+}
+function apagarSave() { try { localStorage.removeItem(CHAVE_SAVE); } catch (e) { /* nada */ } }
+function aplicarSave(sv) {
+  estado.nome = sv.nome; estado.melhorNota = sv.melhorNota || 0;
+  for (const p of participantes) if (sv.notas?.[p.id]) p.notas = sv.notas[p.id];
+  for (const n of npcs) if (sv.fora.includes(n.id)) {
+    n.vivo = false; n.modo = 'fora'; n.humano.raiz.visible = false;
+    const i = alvosExtras.indexOf(n.humano.raiz); if (i >= 0) alvosExtras.splice(i, 1);
+  }
+}
+function mostrarContinuar() {
+  const sv = lerSave();
+  const b = $('btn-continuar-jogo');
+  if (!sv) { b.classList.add('oculto'); $('btn-jogar').textContent = 'Entrar na cozinha'; return; }
+  b.classList.remove('oculto');
+  b.textContent = 'Continuar: ' + ((PROVAS[sv.proxima]?.titulo || 'próxima prova').split(':')[0]) + ' (' + sv.nome + ')';
+  $('btn-jogar').textContent = 'Nova temporada (apaga o progresso)';
+}
+
+async function comecar(continuar = false) {
+  const sv = continuar === true ? lerSave() : null;
+  if (!sv) apagarSave();
+  estado.nome = sv ? sv.nome : (($('nome-jogador').value || '').trim() || 'Chef sem nome');
+  if (sv) aplicarSave(sv);
   participantes[0].nome = estado.nome;
   voz.ligada = $('voz').checked; som.ligado = $('som').checked;
   som.iniciar();
@@ -534,7 +564,7 @@ async function comecar() {
   posicionarNaBancada();
   jogador.travar();
   estado.fase = 'anuncio';
-  try { await programa(); } catch (e) { console.error(e); $('erro').classList.remove('oculto'); $('erro-txt').textContent = e.message; }
+  try { await programa(sv ? sv.proxima : null); } catch (e) { console.error(e); $('erro').classList.remove('oculto'); $('erro-txt').textContent = e.message; }
 }
 
 function posicionarNaBancada() {
@@ -548,9 +578,10 @@ async function cortina(f) {
   $('cortina').classList.remove('fecha');
 }
 
-async function programa() {
-  if (!Q.has('pular')) await falas(TX.ROTEIRO.abertura);
-  for (let i = Q.has('prova') ? +Q.get('prova') : 0; i < PROVAS.length; i++) {
+async function programa(inicio = null) {
+  if (inicio === null && !Q.has('pular')) await falas(TX.ROTEIRO.abertura);
+  if (inicio !== null) await dialogo('patrao', 'Que bom te ver de volta, ' + estado.nome + '. A cozinha não esqueceu de você. Os jurados também não, infelizmente.');
+  for (let i = inicio ?? (Q.has('prova') ? +Q.get('prova') : 0); i < PROVAS.length; i++) {
     const prova = PROVAS[i];
     estado.prova = prova; estado.ctx = {}; estado.rodadas = i + 1;
     await anunciar(prova);
@@ -560,6 +591,7 @@ async function programa() {
     if (prova.id === 'final') return final(r);
     const saiu = await eliminacao(prova, r);
     if (saiu) return fim(false, r);
+    gravarSave(i + 1);
     await cortina(() => { cozinha.preparar(); posicionarNaBancada(); npcsParaBancada(); });
   }
 }
@@ -591,6 +623,8 @@ async function faseMercado(prova) {
   estado.cesta = [];
   estado.relogio = RAPIDO ? 30 : prova.tempoMercado;
   aviso('MERCADO! ' + fmt(estado.relogio));
+  setTimeout(() => estado.fase === 'mercado' && aviso('Mire num produto e aperte E ou clique', 3.5), 2800);
+  msg('Mire o ponto branco num caixote ou embalagem e aperte E (ou clique) pra pôr na cesta. Backspace devolve o último, Enter encerra as compras.', 'bom');
   som.sino();
   for (const n of npcs) if (n.vivo) { n.modo = 'mercado'; rotinaMercado(n); }
   setTimeout(() => estado.fase === 'mercado' && msg(TX.APRESENTADORA + ': ' + pick(TX.MERCADO_FRASES)), 40000);
@@ -751,6 +785,7 @@ async function final(r) {
 
 async function fim(venceu, r, posFinal) {
   estado.fase = 'fim';
+  apagarSave();
   const notas = participantes[0].notas;
   const media = notas.length ? Math.round(notas.reduce((a, b) => a + b, 0) / notas.length) : 0;
   const tit = venceu ? 'O título é seu' : posFinal === 2 ? 'Vice-campeonato' : 'Eliminação';
