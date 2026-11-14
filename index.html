@@ -1,0 +1,126 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Panela de Pressão 4D</title>
+  <meta name="description" content="Reality de culinária em primeira pessoa, com técnica francesa clássica, jurados impiedosos e uma quarta dimensão: o cheiro.">
+  <link rel="icon" href="icone.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=JetBrains+Mono:wght@700&family=Playfair+Display:ital,wght@0,700;0,800;0,900;1,700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/estilo.css">
+  <script type="importmap">
+  { "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.170.0/examples/jsm/"
+  } }
+  </script>
+</head>
+<body>
+  <canvas id="tela3d"></canvas>
+
+  <div id="carregando" class="tela">
+    <div class="logo-grande">PANELA DE PRESSÃO <span>4D</span></div>
+    <div class="barra"><div id="barra-progresso"></div></div>
+    <p id="frase-carregando">Afiando as facas...</p>
+  </div>
+
+  <div id="menu" class="tela oculto">
+    <div class="caixa-menu">
+      <div class="logo-grande">PANELA DE PRESSÃO <span>4D</span></div>
+      <p class="sub">O reality de culinária com uma dimensão a mais: o cheiro.</p>
+      <label class="campo">Seu nome no avental
+        <input id="nome-jogador" maxlength="18" placeholder="Chef sem nome" autocomplete="off">
+      </label>
+      <div class="linha-op">
+        <label>Gráficos
+          <select id="qualidade">
+            <option value="alta">Alta</option>
+            <option value="media" selected>Média</option>
+            <option value="baixa">Leve</option>
+          </select>
+        </label>
+        <label class="check"><input type="checkbox" id="voz" checked> Vozes</label>
+        <label class="check"><input type="checkbox" id="som" checked> Som</label>
+      </div>
+      <button id="btn-jogar" class="btn ouro">Entrar na cozinha</button>
+      <button id="btn-como" class="btn">Como jogar</button>
+      <p class="rodape">Paródia de reality show. Os jurados são fictícios e os egos também.</p>
+    </div>
+  </div>
+
+  <div id="como" class="tela oculto">
+    <div class="caixa-menu larga">
+      <h2>Como jogar</h2>
+      <div class="colunas">
+        <div>
+          <h3>Controles</h3>
+          <ul class="teclas">
+            <li><b>W A S D</b> andar · <b>Shift</b> correr</li>
+            <li><b>Mouse</b> olhar · <b>E</b> ou <b>clique</b> pegar, largar, pôr dentro</li>
+            <li><b>R</b> (segurar) mexer · com o fouet na mão bate mais forte</li>
+            <li><b>F</b> virar, flambar, enrolar omelete, escorrer na pia</li>
+            <li><b>T</b> provar e espetar o termômetro</li>
+            <li><b>Roda do mouse</b> ou <b>Z / X</b> ajustar fogo, forno e fritadeira</li>
+            <li><b>Espaço</b> na tábua: escolher o corte e cortar no ritmo</li>
+            <li><b>Enter</b> avançar diálogo, encerrar compras, adiantar o relógio</li>
+            <li><b>Backspace</b> no mercado: devolver o último item da cesta</li>
+            <li><b>M</b> vozes · <b>Esc</b> pausa</li>
+          </ul>
+        </div>
+        <div>
+          <h3>A cozinha</h3>
+          <ul>
+            <li>Cada panela tem temperatura de verdade. Água trava em 100 °C. Acima de 140 °C começa a reação de Maillard.</li>
+            <li>Carne: núcleo 50 a 54 °C é saignant, 56 a 61 °C é à point. Vire na metade pra dourar os dois lados.</li>
+            <li>Roux: manteiga e farinha mexendo. Mais tempo no fogo, mais escuro. Leite vira bechamel, fundo vira velouté.</li>
+            <li>Emulsões (holandesa, maionese, crème anglaise) talham acima de 87 °C.</li>
+            <li>Concassé: tomate na água fervendo, depois no bowl com gelo, depois na tábua.</li>
+            <li>Frites: bâtonnet, 150 °C pra cozinhar, 180 °C pra crocância.</li>
+            <li>Leve o prato até a mesa dos jurados e aperte E pra entregar.</li>
+            <li>O olfatômetro (canto superior direito) é a quarta dimensão. Se ficar vermelho, corre.</li>
+          </ul>
+        </div>
+      </div>
+      <button id="btn-voltar" class="btn ouro">Voltar</button>
+    </div>
+  </div>
+
+  <div id="hud" class="oculto">
+    <div id="hud-prova"><div id="hud-titulo"></div><div id="hud-fase"></div></div>
+    <div id="hud-relogio">00:00</div>
+    <div id="olfato"><div class="olf-tit">OLFATÔMETRO <span>4D</span></div><div class="olf-barra"><div id="olf-nivel"></div></div><div id="olf-txt">Cheiro de estúdio novo</div></div>
+    <div id="mira"></div>
+    <div id="alvo"><div id="alvo-nome"></div><div id="alvo-dicas"></div></div>
+    <div id="info"></div>
+    <div id="mao"></div>
+    <div id="cesta" class="oculto"></div>
+    <div id="log"></div>
+    <div id="aviso"></div>
+  </div>
+
+  <div id="dialogo" class="oculto">
+    <div id="dlg-nome"></div>
+    <div id="dlg-texto"></div>
+    <div id="dlg-seguir">Enter ou clique ▸</div>
+  </div>
+
+  <div id="corte" class="oculto">
+    <div id="corte-menu"></div>
+    <div id="corte-jogo" class="oculto">
+      <div id="corte-tit"></div>
+      <div class="corte-barra"><div id="corte-zona"></div><div id="corte-agulha"></div></div>
+      <div id="corte-info">Espaço ou clique quando a agulha estiver na faixa dourada</div>
+    </div>
+  </div>
+
+  <div id="avaliacao" class="tela oculto"><div class="caixa-menu larga" id="aval-conteudo"></div></div>
+  <div id="pausa" class="tela oculto"><div class="caixa-menu"><h2>Pausa</h2><p>O relógio também parou. Milagre.</p><button id="btn-continuar" class="btn ouro">Continuar</button><button id="btn-ajuda" class="btn">Como jogar</button></div></div>
+  <div id="fim" class="tela oculto"><div class="caixa-menu larga" id="fim-conteudo"></div></div>
+  <div id="cortina"></div>
+  <div id="erro" class="tela oculto"><div class="caixa-menu"><h2>Deu ruim na cozinha</h2><p id="erro-txt"></p></div></div>
+
+  <script type="module" src="js/jogo.js"></script>
+</body>
+</html>

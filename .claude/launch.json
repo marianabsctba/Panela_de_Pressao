@@ -1,0 +1,6 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    { "name": "panela", "runtimeExecutable": "py", "runtimeArgs": ["-3", "-m", "http.server", "8080"], "port": 8080 }
+  ]
+}
