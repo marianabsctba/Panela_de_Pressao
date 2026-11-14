@@ -1,0 +1,12 @@
+{
+  "name": "panela-de-pressao-4d",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Reality de culinária em 3D (e uma dimensão de cheiro) que roda no navegador.",
+  "scripts": {
+    "test": "node --test tests/*.test.js",
+    "servir": "py -3 -m http.server 8080"
+  },
+  "license": "MIT"
+}
