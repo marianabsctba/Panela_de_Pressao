@@ -76,22 +76,28 @@ export function M(nome) {
       break;
     }
     case 'piso': {
+      // Ladrilho hidráulico creme, azul e dourado (4 x 4 ladrilhos por textura)
       const c = canvas(1024, 1024, (g, w, h) => {
-        g.fillStyle = '#0a1230'; g.fillRect(0, 0, w, h);
-        for (let y = 0; y < 4; y++) for (let x = 0; x < 4; x++) {
-          const v = 14 + Math.random() * 10;
-          g.fillStyle = `rgb(${v},${v + 6},${v + 34})`;
-          g.fillRect(x * 256 + 3, y * 256 + 3, 250, 250);
-          for (let k = 0; k < 30; k++) {
-            g.strokeStyle = `rgba(120,140,220,${Math.random() * 0.05})`;
-            g.beginPath(); g.moveTo(x * 256 + Math.random() * 256, y * 256); g.bezierCurveTo(x * 256 + Math.random() * 256, y * 256 + 80, x * 256 + Math.random() * 256, y * 256 + 170, x * 256 + Math.random() * 256, y * 256 + 256); g.stroke();
-          }
+        const T = 256;
+        for (let ty = 0; ty < 4; ty++) for (let tx = 0; tx < 4; tx++) {
+          const x0 = tx * T, y0 = ty * T, cx = x0 + T / 2, cy = y0 + T / 2;
+          const v = 214 + Math.random() * 10;
+          const creme = 'rgb(' + v + ',' + (v - 8) + ',' + (v - 26) + ')'; g.fillStyle = creme; g.fillRect(x0, y0, T, T);
+          g.fillStyle = '#16306e';
+          for (const [qx, qy] of [[x0, y0], [x0 + T, y0], [x0, y0 + T], [x0 + T, y0 + T]]) { g.beginPath(); g.arc(qx, qy, T * 0.3, 0, Math.PI * 2); g.fill(); }
+          g.fillStyle = creme;
+          for (const [qx, qy] of [[x0, y0], [x0 + T, y0], [x0, y0 + T], [x0 + T, y0 + T]]) { g.beginPath(); g.arc(qx, qy, T * 0.2, 0, Math.PI * 2); g.fill(); }
+          g.strokeStyle = '#16306e'; g.lineWidth = 10;
+          g.beginPath(); g.arc(cx, cy, T * 0.22, 0, Math.PI * 2); g.stroke();
+          g.fillStyle = '#c9992e';
+          g.beginPath(); g.moveTo(cx, cy - T * 0.12); g.lineTo(cx + T * 0.12, cy); g.lineTo(cx, cy + T * 0.12); g.lineTo(cx - T * 0.12, cy); g.closePath(); g.fill();
+          g.fillStyle = '#16306e'; g.beginPath(); g.arc(cx, cy, T * 0.04, 0, Math.PI * 2); g.fill();
+          g.strokeStyle = 'rgba(40,40,60,0.35)'; g.lineWidth = 3; g.strokeRect(x0 + 1.5, y0 + 1.5, T - 3, T - 3);
         }
-        g.strokeStyle = '#b8902a'; g.lineWidth = 6;
-        for (let i = 0; i <= 4; i++) { g.beginPath(); g.moveTo(i * 256, 0); g.lineTo(i * 256, h); g.stroke(); g.beginPath(); g.moveTo(0, i * 256); g.lineTo(w, i * 256); g.stroke(); }
+        ruido(g, w, h, 12);
       });
-      const rug = canvas(256, 256, (g, w, h) => { g.fillStyle = '#9a9a9a'; g.fillRect(0, 0, w, h); ruido(g, w, h, 30); g.fillStyle = '#c0c0c0'; for (let i = 0; i <= 1; i++) { g.fillRect(i * 255 - 2, 0, 4, h); g.fillRect(0, i * 255 - 2, w, 4); } });
-      m = new THREE.MeshStandardMaterial({ map: textura(c, [11, 8]), roughnessMap: textura(rug, [11, 8], false), roughness: 0.75, metalness: 0.1 });
+      const rug = canvas(256, 256, (g, w, h) => { g.fillStyle = '#b4b4b4'; g.fillRect(0, 0, w, h); ruido(g, w, h, 30); g.fillStyle = '#e6e6e6'; for (let i = 0; i <= 4; i++) { g.fillRect(i * 64 - 1, 0, 2, h); g.fillRect(0, i * 64 - 1, w, 2); } });
+      m = new THREE.MeshStandardMaterial({ map: textura(c, [11, 8]), roughnessMap: textura(rug, [11, 8], false), roughness: 0.7, metalness: 0 });
       break;
     }
     case 'teto': m = new THREE.MeshStandardMaterial({ color: 0x050a1c, roughness: 0.95 }); break;
@@ -172,7 +178,10 @@ export function texturaTexto(linhas, o = {}) {
     const ls = Array.isArray(linhas) ? linhas : [linhas];
     const tam = o.tam || Math.floor(h / (ls.length + 0.6));
     ls.forEach((l, i) => {
-      g.font = `${i === 0 ? (o.peso || '800') : '500'} ${i === 0 ? tam : Math.floor(tam * 0.62)}px ${o.fonte || '"Playfair Display", Georgia, serif'}`;
+      let px = i === 0 ? tam : Math.floor(tam * 0.62);
+      const fonte = () => `${i === 0 ? (o.peso || '800') : '500'} ${px}px ${o.fonte || '"Playfair Display", Georgia, serif'}`;
+      g.font = fonte();
+      while (px > 10 && g.measureText(l).width > w * 0.9) { px -= 2; g.font = fonte(); }
       if (o.sombra) { g.shadowColor = o.sombra; g.shadowBlur = 18; }
       g.fillText(l, w / 2, h / 2 + (i - (ls.length - 1) / 2) * tam * 1.05);
     });

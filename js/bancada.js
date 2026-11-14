@@ -19,7 +19,19 @@ function hit(w, h, d, x, y, z, ent) {
 export function construirBancada(numero, interativa) {
   const g = new THREE.Group();
   const add = (geo, mat, x, y, z, rot) => { const m = malha(geo, mat, x, y, z); if (rot) m.rotation.set(...rot); g.add(m); return m; };
-  add(caixaR(3.0, 0.84, 1.1, 0.03), M('inox'), 0, 0.45, 0);
+  add(caixaR(3.0, 0.84, 1.1, 0.03), M('azulLaca'), 0, 0.45, 0);
+  // Gavetas com puxadores dourados (lado do chef, à direita do forno)
+  for (let i = 0; i < 3; i++) {
+    const y = 0.72 - i * 0.24;
+    add(caixaR(1.05, 0.2, 0.02, 0.008), M('azulLaca'), 0.62, y, 0.558);
+    add(new THREE.CylinderGeometry(0.009, 0.009, 0.22, 12), M('ouro'), 0.62, y + 0.04, 0.585, [0, 0, Math.PI / 2]);
+    for (const l of [1, -1]) add(new THREE.BoxGeometry(0.014, 0.014, 0.03), M('ouro'), 0.62 + l * 0.1, y + 0.04, 0.572);
+  }
+  // Luminária pendente quente sobre a bancada
+  add(new THREE.CylinderGeometry(0.004, 0.004, 4.6, 6), M('plasticoPreto'), 0, 5.05, 0);
+  add(torno([[0.02, 0.0], [0.06, -0.03], [0.17, -0.2], [0.26, -0.27], [0.255, -0.275], [0.165, -0.205], [0.055, -0.035], [0.015, -0.005]], 40), M('azulLaca'), 0, 2.75, 0);
+  add(new THREE.TorusGeometry(0.258, 0.008, 8, 40), M('ouro'), 0, 2.477, 0, [Math.PI / 2, 0, 0]);
+  add(new THREE.SphereGeometry(0.06, 20, 12), M('luzQuente'), 0, 2.53, 0);
   add(caixaR(3.06, 0.045, 1.16, 0.012), M('inoxTampo'), 0, TOPO - 0.0225, 0);
   add(new THREE.BoxGeometry(3.0, 0.06, 1.06), M('plasticoPreto'), 0, 0.03, 0);
   add(new THREE.BoxGeometry(2.9, 0.68, 0.012), M('azulLaca'), 0, 0.46, -0.556);

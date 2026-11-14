@@ -15,6 +15,7 @@ import * as TX from './textos.js';
 import { CORTES, INGREDIENTES, PREPAROS } from './dados.js';
 import { malhaFerramenta } from './objetos.js';
 import { definirAnisotropia } from './materiais.js';
+import { Corte3D } from './corte3d.js';
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -38,7 +39,7 @@ const estado = {
 const esperas = [];
 const esperar = (s) => new Promise((r) => esperas.push({ t: estado.tempo + s, r }));
 
-let renderer, cena, camera, composer, bloom, estudio, cozinha, jogador, efeitos, som, voz;
+let renderer, cena, camera, composer, bloom, estudio, cozinha, jogador, efeitos, som, voz, corte3d;
 const personagens = {};
 const npcs = [];
 let participantes = [];
@@ -81,7 +82,7 @@ async function iniciar() {
   estudio = construirEstudio(cena, qual);
   await passo(45, 'Chamando os participantes...');
   let carregados = 0;
-  await carregarModelos(() => { carregados++; $('barra-progresso').style.width = (45 + carregados * 2) + '%'; });
+  await carregarModelos([...TX.PARTICIPANTES.map((p) => p.id), 'jacuzzi', 'risotto', 'fumaca', 'patrao'], () => { carregados++; $('barra-progresso').style.width = (45 + carregados) + '%'; });
   await passo(65, 'Vestindo os aventais...');
   efeitos = new Efeitos(cena);
   som = new Som(); voz = new Voz();
@@ -98,6 +99,7 @@ async function iniciar() {
   bloom = new UnrealBloomPass(new THREE.Vector2(window.innerWidth / 2, window.innerHeight / 2), 0.2, 0.5, 0.96);
   if (qual !== 'baixa') composer.addPass(bloom);
   composer.addPass(new OutputPass());
+  corte3d = new Corte3D(renderer, camera, cena, som);
   window.addEventListener('resize', ajustarTamanho);
   await passo(90, 'Compilando os sabores...');
   renderer.compile(cena, camera);
@@ -114,7 +116,7 @@ function criarElenco() {
   const idxs = [...Array(16).keys()].filter((i) => i !== BANCADA_JOGADOR);
   participantes = [{ id: 'voce', nome: 'Você', jogador: true, vivo: true, bancada: BANCADA_JOGADOR, notas: [] }];
   TX.PARTICIPANTES.forEach((p, i) => {
-    const h = new Humano({ ...p.corpo, roupa: 'avental' });
+    const h = new Humano({ ...p.corpo, id: p.id });
     const npc = { ...p, vivo: true, bancada: idxs[i], humano: h, notas: [], modo: 'bancada', tA: rnd(0, 3) };
     const b = posBancada(npc.bancada);
     h.raiz.position.set(b.x, 0, b.z + 1.1);
@@ -127,7 +129,7 @@ function criarElenco() {
   });
   const posJ = { jacuzzi: [-2.2, -12.4], risotto: [0, -12.4], fumaca: [2.2, -12.4], patrao: [-6, -10.95] };
   for (const id of ['jacuzzi', 'risotto', 'fumaca', 'patrao']) {
-    const h = new Humano(TX.JURADOS_INFO[id].corpo);
+    const h = new Humano({ ...TX.JURADOS_INFO[id].corpo, id });
     h.raiz.position.set(posJ[id][0], 0, posJ[id][1]);
     h.rumo = 0;
     h.estado = id === 'jacuzzi' ? 'bracos_cruzados' : 'parado';
@@ -195,6 +197,7 @@ function fecharOverlay(id) { $(id).classList.add('oculto'); estado.overlay = fal
 
 function aoMudarTrava(travado) {
   if (!travado && !estado.overlay && ['anuncio', 'mercado', 'cozinha', 'maos', 'julgamento', 'eliminacao'].includes(estado.fase)) {
+    if (estado.corte?.fase === 'close') return;
     if (estado.corte) fecharCorte();
     estado.pausado = true; voz.parar();
     $('pausa').classList.remove('oculto');
@@ -216,6 +219,7 @@ function configurarEntrada() {
 
   window.addEventListener('keydown', (e) => {
     if (estado.overlay && overlayResolve && (e.code === 'Enter' || e.code === 'NumpadEnter')) { overlayResolve(); return; }
+    if (estado.corte?.fase === 'close') { if (e.code === 'Escape') fecharCorte(); return; }
     if (estado.dialogo && jogador.travado) { if (['Enter', 'Space', 'NumpadEnter'].includes(e.code)) { e.preventDefault(); avancarDialogo(); } return; }
     if (!jogando()) return;
     if (estado.corte) { teclaCorte(e); return; }
@@ -308,33 +312,29 @@ function teclaCorte(e) {
   } else if (e.code === 'Space' && !e.repeat) { e.preventDefault(); golpeCorte(); }
 }
 function iniciarCorte(corte) {
+  const c = estado.corte;
   const d = CORTES[corte];
-  Object.assign(estado.corte, { fase: 'jogo', corte, d, golpe: 0, hits: [], zona: rnd(0.2, 0.8), t: 0, erros: 0 });
+  const n = Math.max(3, Math.min(9, d.golpes));
+  Object.assign(c, { fase: 'close', corte, d, n });
   $('corte-menu').classList.add('oculto'); $('corte-jogo').classList.remove('oculto');
-  desenharCorte();
-}
-function desenharCorte() {
-  const c = estado.corte;
-  $('corte-tit').textContent = `${c.d.nome}: golpe ${c.golpe + 1} de ${c.d.golpes}`;
-  const z = $('corte-zona'); z.style.left = ((c.zona - c.d.zona / 2) * 100) + '%'; z.style.width = (c.d.zona * 100) + '%';
-}
-function golpeCorte() {
-  const c = estado.corte;
-  const ag = 0.5 + 0.5 * Math.sin(c.t * c.d.vel * 2.4);
-  let q = 1 - Math.abs(ag - c.zona) / (c.d.zona / 2);
-  if (q < 0) { q = 0; c.erros++; if (c.erros === 3) { msg('Quase levou o dedo junto. Curativo dourado aplicado, combina com o estúdio.', 'ruim'); som.bip(220, 0.3, 'square', 0.2); } } else c.erros = 0;
-  c.hits.push(q); c.golpe++;
-  som.corte();
-  if (c.golpe >= c.d.golpes) {
-    const media = c.hits.reduce((a, b) => a + b, 0) / c.hits.length;
-    cozinha.aplicarCorte(c.comida, c.corte, Math.min(1, media * 1.1));
+  document.querySelector('#corte .corte-barra').style.display = 'none';
+  $('corte-info').textContent = 'Clique e arraste de cima pra baixo sobre a guia clara. Esc cancela.';
+  document.body.classList.add('modo-close');
+  corte3d.iniciar(c.comida.obj, n, d.nome, '', (q) => {
+    document.body.classList.remove('modo-close');
+    if (q !== null && q !== undefined) cozinha.aplicarCorte(c.comida, corte, Math.min(1, q * 1.05));
+    else msg('Corte cancelado. A faca volta pro bloco, a cenoura respira aliviada.');
     fecharCorte();
-    return;
-  }
-  c.zona = rnd(0.15, 0.85);
-  desenharCorte();
+    jogador.travar();
+  }, (t) => msg(t));
 }
-function fecharCorte() { estado.corte = null; $('corte').classList.add('oculto'); }
+function fecharCorte() {
+  const c = estado.corte;
+  estado.corte = null;
+  $('corte').classList.add('oculto');
+  if (c?.fase === 'close' && corte3d.ativo) corte3d.encerrar(null);
+  document.body.classList.remove('modo-close');
+}
 
 // ---------- Laço principal ----------
 let tamAtual = '';
@@ -371,7 +371,7 @@ function atualizar(dt) {
   estado.tempo += dt;
   for (let i = esperas.length - 1; i >= 0; i--) if (estado.tempo >= esperas[i].t) { esperas[i].r(); esperas.splice(i, 1); }
   const mover = jogando() && !estado.corte;
-  jogador.update(dt, mover);
+  if (corte3d.update(dt)) { if (estado.corte?.fase === 'close') $('corte-tit').textContent = `${estado.corte.d.nome}: corte ${Math.min(corte3d.feitos + 1, estado.corte.n)} de ${estado.corte.n}`; } else jogador.update(dt, mover);
   mira = jogando() ? jogador.mirar([...cozinha.alvos, ...estudio.interativos, ...alvosExtras]) : null;
   const cozinhando = estado.fase === 'cozinha' || estado.fase === 'maos';
   jogador.mexendo = false;

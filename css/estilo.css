@@ -114,3 +114,8 @@ table.rank td.n { text-align: right; font-weight: 700; }
 
 #cortina { position: fixed; inset: 0; background: #000; opacity: 0; pointer-events: none; transition: opacity 0.5s; z-index: 30; }
 #cortina.fecha { opacity: 1; }
+
+/* Corte em close: só a tábua, a faca e o painel embaixo */
+body.modo-close #mira, body.modo-close #alvo, body.modo-close #info, body.modo-close #mao { display: none !important; }
+body.modo-close #corte { top: auto; bottom: 20px; }
+body.modo-close #tela3d { cursor: crosshair; }

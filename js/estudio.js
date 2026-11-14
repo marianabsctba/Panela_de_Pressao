@@ -48,12 +48,8 @@ export function construirEstudio(cena, qualidade) {
     L(mk(new THREE.BoxGeometry(w, 0.18, 0.06), M('ouro'), x, 0.09, z, [0, ry, 0]));
     L(mk(new THREE.BoxGeometry(w, 0.08, 0.08), M('ouro'), x, 6.2, z, [0, ry, 0]));
   }
-  // Pilastras douradas
-  for (let x = -18; x <= 18; x += 6) {
-    if (Math.abs(x) < 4) continue;
-    L(mk(new THREE.CylinderGeometry(0.28, 0.32, 9, 24), M('ouroFosco'), x, 4.5, -15.7));
-  }
-  for (let z = -12; z <= 12; z += 6) for (const x of [-20.7, 20.7]) L(mk(new THREE.CylinderGeometry(0.28, 0.32, 9, 24), M('ouroFosco'), x, 4.5, z));
+  // Pilastras douradas só nos cantos, para não tampar telão e placas
+  for (const [x, z] of [[-20.7, -15.7], [20.7, -15.7], [-20.7, 14.7], [20.7, 14.7]]) L(mk(new THREE.CylinderGeometry(0.28, 0.32, 9, 24), M('ouroFosco'), x, 4.5, z));
 
   // Treliça do teto com refletores
   for (let x = -18; x <= 18; x += 6) L(mk(new THREE.BoxGeometry(0.18, 0.18, 30), M('inoxEscuro'), x, 7.6, -0.5));

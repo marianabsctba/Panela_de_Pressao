@@ -28,7 +28,7 @@ await env('Emulation.setDeviceMetricsOverride', { width: 1280, height: 720, devi
 await env('Page.navigate', { url });
 const inicio = Date.now();
 for (;;) {
-  const r = await env('Runtime.evaluate', { expression: 'window.__pp && __pp.estado.fase', returnByValue: true });
+  const r = await env('Runtime.evaluate', { expression: process.env.PRONTO || 'window.__pp && __pp.estado.fase', returnByValue: true });
   if (r?.result?.value && r.result.value !== 'carregando') break;
   if (Date.now() - inicio > 90000) { console.log('carregamento não terminou'); break; }
   await esperar(400);
