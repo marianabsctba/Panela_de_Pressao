@@ -271,6 +271,35 @@ CADEIA = {"clavicle_l": "upperarm_l", "clavicle_r": "upperarm_r", "upperarm_l": 
           "pelvis": "spine_01", "spine_01": "spine_02", "spine_02": "spine_03", "spine_03": "neck_01", "neck_01": "head"}
 
 
+import re
+DEDO = re.compile(r"^(index|middle|ring|pinky|thumb)_0([1-3])_[lr]$")
+
+
+def ehDedo(nome):
+    return bool(DEDO.match(nome))
+
+
+def curva_dedo(nome):
+    """Mão relaxada: dedos levemente curvados, polegar quase reto."""
+    m = DEDO.match(nome)
+    if not m:
+        return Matrix.Identity(4)
+    seg = int(m.group(2))
+    ang = ({1: 0.08, 2: 0.12, 3: 0.1} if m.group(1) == "thumb" else {1: 0.22, 2: 0.32, 3: 0.22})[seg]
+    return Matrix.Rotation(ang * CURVA_SINAL, 4, "X")
+
+
+CURVA_SINAL = 1.0
+
+
+def alinhar2(d_t, n_t, d_s, n_s):
+    """Rotação que leva a base (direção, normal) do alvo para a base da fonte."""
+    def base(d, n):
+        n2 = (n - d * n.dot(d)).normalized()
+        return Matrix((d, n2, d.cross(n2))).transposed()
+    return (base(d_s, n_s) @ base(d_t, n_t).transposed()).to_quaternion()
+
+
 def q_mundo(m):
     return m.to_3x3().normalized().to_quaternion()
 
@@ -294,7 +323,7 @@ def retarget(tgt, manter_fonte=False):
     mapa = {}
     for sb in src.data.bones:
         nome = NOME.get(sb.name, sb.name)
-        if nome in tgt.data.bones:
+        if nome in tgt.data.bones and not ehDedo(nome):
             mapa[nome] = sb.name
     # Rotação de referência: alinha a direção dos membros do alvo à da fonte (A-pose x T-pose)
     ref = {}
@@ -306,6 +335,15 @@ def retarget(tgt, manter_fonte=False):
             dt_ = (tw @ tgt.data.bones[filho].head_local) - (tw @ tb.head_local)
             ds_ = (sw @ src.data.bones[mapa[filho]].head_local) - (sw @ src.data.bones[mapa[tb.name]].head_local)
             ref[tb.name] = dt_.rotation_difference(ds_) @ q_rest
+            # Braço: alinha também a palma (direção + normal da palma), não só a direção do osso
+            lado = tb.name[-1]
+            if tb.name.split("_")[0] in ("upperarm", "lowerarm", "hand") and all(n in tgt.data.bones and n in mapa for n in (f"hand_{lado}", f"index_01_{lado}", f"pinky_01_{lado}")):
+                def palma(arm, mw, nome_mao, nome_ind, nome_min):
+                    h = mw @ arm.data.bones[nome_mao].head_local
+                    return (mw @ arm.data.bones[nome_ind].head_local - h).cross(mw @ arm.data.bones[nome_min].head_local - h).normalized()
+                nt = palma(tgt, tw, f"hand_{lado}", f"index_01_{lado}", f"pinky_01_{lado}")
+                ns = palma(src, sw, mapa[f"hand_{lado}"], f"index_01_{lado}", f"pinky_01_{lado}")
+                ref[tb.name] = alinhar2(dt_.normalized(), nt, ds_.normalized(), ns) @ q_rest
     s_rest = {n: q_mundo(sw @ src.data.bones[s].matrix_local) for n, s in mapa.items()}
     alt_t = (tw @ tgt.data.bones["pelvis"].head_local).z
     alt_s = (sw @ src.data.bones[mapa["pelvis"]].head_local).z
@@ -330,7 +368,8 @@ def retarget(tgt, manter_fonte=False):
                 Mp = M[tb.parent.name] if tb.parent else Matrix.Identity(4)
                 local_rest = Rp.inverted() @ R
                 cabeca = (Mp @ local_rest).to_translation()
-                if tb.name in mapa:
+                parado = nova.name in PARADAS and tb.name in NEUTROS
+                if tb.name in mapa and not parado:
                     sp = src.pose.bones[mapa[tb.name]]
                     q_s = q_mundo(sw @ sp.matrix)
                     q_t = q_s @ s_rest[tb.name].inverted() @ ref[tb.name]
@@ -340,7 +379,7 @@ def retarget(tgt, manter_fonte=False):
                         cabeca = (tinv @ ((tw @ R.to_translation()) + ps * razao))
                     Mb = Matrix.Translation(cabeca) @ q_arm.to_matrix().to_4x4()
                 else:
-                    Mb = Mp @ local_rest
+                    Mb = Mp @ local_rest @ curva_dedo(tb.name)
                 M[tb.name] = Mb
                 basis = (Mp @ local_rest).inverted() @ Mb
                 pb = tgt.pose.bones[tb.name]
@@ -357,7 +396,7 @@ def retarget(tgt, manter_fonte=False):
         bpy.data.actions.remove(a)
 
 
-PARADAS = {"Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Interact", "PickUp_Table", "Spell_Simple_Idle_Loop", "Hit_Head", "Fixing_Kneeling", "Push_Loop"}
+PARADAS = {"Idle_Loop", "Idle_Talking_Loop", "Idle_Torch_Loop", "Interact", "PickUp_Table", "Spell_Simple_Idle_Loop", "Hit_Head", "Push_Loop"}
 NEUTROS = {"pelvis", "spine_01", "spine_02", "spine_03", "thigh_l", "thigh_r", "calf_l", "calf_r", "foot_l", "foot_r", "ball_l", "ball_r"}
 
 
