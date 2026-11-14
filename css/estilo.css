@@ -32,7 +32,7 @@ html, body { margin: 0; height: 100%; overflow: hidden; background: #020818; col
   padding: 28px 30px; width: min(480px, 100%); box-shadow: 0 20px 60px rgba(0,0,0,0.5), inset 0 1px 0 rgba(255,255,255,0.08); display: flex; flex-direction: column; gap: 12px; max-height: calc(100vh - 32px); overflow-y: auto; }
 .caixa-menu.larga { width: min(920px, 100%); }
 .caixa-menu h2 { font-family: var(--fonte-tit); color: var(--ouro2); margin: 0 0 4px; font-size: 30px; }
-.caixa-menu h3 { color: var(--ouro2); margin: 6px 0; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; }
+.caixa-menu h3 { color: var(--ouro2); margin: 6px 0; font-size: 15px; letter-spacing: 0.08em; }
 .caixa-menu ul { margin: 0; padding-left: 18px; line-height: 1.55; font-size: 14px; color: #dfe5ff; }
 .sub { text-align: center; margin: 0 0 8px; color: #c8d2f8; }
 .campo { display: flex; flex-direction: column; gap: 6px; font-size: 13px; color: #c8d2f8; }
@@ -44,6 +44,8 @@ input, select { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1
 .btn.ouro { background: linear-gradient(180deg, #f6c94a, #c9992e); color: #061a4a; border: none; font-weight: 800; }
 .btn.ouro:hover { background: linear-gradient(180deg, #ffd96a, #d8a83a); }
 .rodape { font-size: 11px; color: #8a96c8; text-align: center; margin: 4px 0 0; }
+.assinatura { font-size: 12px; letter-spacing: 0.12em; color: #8a96c8; text-align: center; margin: 2px 0 0; }
+.assinatura b { color: var(--ouro2); font-weight: 600; }
 .colunas { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
 @media (max-width: 720px) { .colunas { grid-template-columns: 1fr; } }
 .teclas b { color: var(--ouro2); }
@@ -52,7 +54,7 @@ input, select { font: inherit; padding: 10px 12px; border-radius: 8px; border: 1
 #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; font-size: 14px; }
 #hud-prova { position: absolute; left: 16px; top: 14px; max-width: 40vw; }
 #hud-titulo { font-family: var(--fonte-tit); font-weight: 800; font-size: 18px; color: var(--ouro2); text-shadow: 0 2px 8px #000; }
-#hud-fase { font-size: 12px; color: #c8d2f8; text-transform: uppercase; letter-spacing: 0.12em; margin-top: 2px; text-shadow: 0 1px 4px #000; }
+#hud-fase { font-size: 12px; color: #c8d2f8; letter-spacing: 0.12em; margin-top: 2px; text-shadow: 0 1px 4px #000; }
 #hud-relogio { position: absolute; left: 50%; top: 10px; transform: translateX(-50%); font: 700 34px 'JetBrains Mono', monospace; color: var(--ouro2);
   background: rgba(2, 8, 24, 0.7); border: 1px solid rgba(227,179,60,0.6); border-radius: 10px; padding: 2px 16px; text-shadow: 0 0 12px rgba(246,201,74,0.5); }
 #hud-relogio.alerta { color: var(--vermelho); border-color: var(--vermelho); animation: pulso 0.5s infinite alternate; }
