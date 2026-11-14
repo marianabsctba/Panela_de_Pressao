@@ -146,3 +146,37 @@ test('npc e eliminação', () => {
   assert.ok(n.nota > 30 && n.nota < 90);
   assert.deepEqual(eliminar([{ id: 'a', nota: 50 }, { id: 'b', nota: 10 }, { id: 'c', nota: 90 }], 1), ['b']);
 });
+
+const rouxQuente = () => {
+  const p = K.novoRecipiente('panela');
+  K.adicionar(p, K.novaComida('manteiga'));
+  K.adicionar(p, K.novaComida('farinha'));
+  rodar(p, 40, K.alvoBoca(5), 1);
+  return p;
+};
+
+test('leite de uma vez no roux quente empelota; aos poucos, mexendo, fica liso', () => {
+  const p1 = rouxQuente();
+  K.adicionar(p1, K.novaComida('leite'));
+  rodar(p1, 60, K.alvoBoca(5), 0.9);
+  const b1 = p1.conteudo.find((c) => c.id === 'bechamel');
+
+  const p2 = rouxQuente();
+  const caixa = K.novaComida('leite');
+  for (let i = 0; i < 10; i++) { K.verterPorcao(caixa, p2, 0.1); rodar(p2, 1.5, K.alvoBoca(5), 2.6); }
+  rodar(p2, 50, K.alvoBoca(5), 2.6);
+  const b2 = p2.conteudo.find((c) => c.id === 'bechamel');
+  assert.ok(b1 && b2, 'as duas bechamel formaram');
+  assert.ok(b1.grumos > b2.grumos + 0.2, `grumos ${b1.grumos} x ${b2.grumos}`);
+  assert.ok(!p2.conteudo.some((c) => c.id === 'leite'), 'o leite que chegou depois foi incorporado');
+});
+
+test('verter porção move volume e tempero proporcional', () => {
+  const de = K.novoRecipiente('panela'), para = K.novoRecipiente('bowl');
+  const caldo = K.novaComida('fundo_claro'); caldo.sal = 2; K.adicionar(de, caldo);
+  const v = K.verterPorcao(de, para, 0.25);
+  assert.equal(v, 0.25);
+  const chegou = para.conteudo.find((c) => c.id === 'fundo_claro');
+  assert.ok(Math.abs(chegou.volume - 0.25) < 1e-9 && Math.abs(chegou.sal - 0.5) < 1e-9);
+  assert.ok(Math.abs(caldo.volume - 0.75) < 1e-9);
+});

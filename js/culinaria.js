@@ -99,6 +99,8 @@ export function passo(r, dt, alvo = AMBIENTE) {
       }
     }
   }
+  // Bater forte desfaz o choque de líquido despejado de uma vez sobre o roux
+  if (r.choque) r.choque *= Math.exp(-dt * Math.max(0, r.mexida - 2) * 0.3);
   r.mexida *= Math.exp(-dt * 1.2);
 
   const temGorduraQuente = r.conteudo.some((c) => (c.id === 'manteiga' || c.id === 'manteiga_clarificada') && r.temp > 100);
@@ -258,11 +260,11 @@ export const REGRAS = [
   { id: 'bechamel', tempo: 5,
     req: [{ f: eh('roux') }, { f: eh('leite') }],
     cond: (r) => r.temp >= 80 && r.mexida > 0.4,
-    fazer: ([roux], r) => ({ corRoux: roux[0].corRoux, grumos: r.mexida < 1 ? 0.3 : 0 }) },
+    fazer: ([roux], r) => ({ corRoux: roux[0].corRoux, grumos: (r.mexida < 1 ? 0.3 : 0) + gastarChoque(r) }) },
   { id: 'veloute', tempo: 5,
     req: [{ f: eh('roux') }, { f: eh('fundo_claro', 'fumet') }],
     cond: (r) => r.temp >= 80 && r.mexida > 0.4,
-    fazer: ([roux, fundo], r) => ({ corRoux: roux[0].corRoux, grumos: r.mexida < 1 ? 0.3 : 0, base: fundo[0].id }) },
+    fazer: ([roux, fundo], r) => ({ corRoux: roux[0].corRoux, grumos: (r.mexida < 1 ? 0.3 : 0) + gastarChoque(r), base: fundo[0].id }) },
   { id: 'espanhola', tempo: 12,
     req: [{ f: (c) => c.id === 'roux' && c.corRoux >= 0.6 }, { f: eh('fundo_escuro') }, { f: eh('tomate', 'extrato_tomate') }, { f: mirepoix, min: 1, max: 3 }],
     cond: (r) => r.temp >= 90,
@@ -325,7 +327,27 @@ function casar(r, regra) {
   return grupos;
 }
 
+function gastarChoque(r) { const c = Math.min(0.6, r.choque || 0); r.choque = 0; return c; }
+
+// Molho já formado incorpora o líquido que chega aos poucos (afina o molho)
+const ABSORVE = { bechamel: ['leite', 'creme'], veloute: ['fundo_claro', 'fumet'], espanhola: ['fundo_escuro'], molho_au_poivre: ['creme', 'fundo_escuro'], molho_tomate: ['agua'], creme_anglaise: ['leite', 'creme'] };
+function absorver(r, dt) {
+  for (const m of r.conteudo) {
+    const aceita = ABSORVE[m.id];
+    if (!aceita) continue;
+    const liq = r.conteudo.find((c) => aceita.includes(c.id));
+    if (!liq || r.temp < 60 || r.mexida < 0.3) { m.absorvendo = 0; continue; }
+    m.absorvendo = (m.absorvendo || 0) + dt;
+    if (m.absorvendo < 1.5) continue;
+    const total = m.volume + liq.volume;
+    m.espessura *= m.volume / total;
+    m.sal += liq.sal; m.volume = total; m.absorvendo = 0;
+    remover(r, liq);
+  }
+}
+
 function aplicarRegras(r, dt, ev) {
+  absorver(r, dt);
   for (const regra of REGRAS) {
     const g = casar(r, regra);
     if (g && regra.cond(r, g)) {
@@ -348,11 +370,46 @@ function aplicarRegras(r, dt, ev) {
 
 // ---------- Ações do jogador ----------
 
+// Líquido chegando de uma vez em roux quente vira grumo (a não ser que se bata forte)
+function registrarChoque(r, c, vol) {
+  if (['leite', 'creme', 'fundo_claro', 'fundo_escuro', 'fumet'].includes(c.id) && r.temp > 80 && r.conteudo.some((x) => x.id === 'roux')) {
+    r.choque = (r.choque || 0) + Math.max(0, vol - 0.25) * 1.0;
+  }
+}
+
+// Despeja até 'quanto' de líquido de 'de' (recipiente ou embalagem) em 'para'. Devolve o volume movido.
+export function verterPorcao(de, para, quanto) {
+  const fontes = de.tipo === 'recipiente' ? de.conteudo.filter((c) => ehLiquido(c) || (c.id === 'manteiga' && c.tN > 40)) : (ehLiquido(de) ? [de] : []);
+  let movido = 0;
+  for (const c of fontes) {
+    if (movido >= quanto) break;
+    const v = Math.min(c.volume, quanto - movido);
+    if (v <= 0) continue;
+    const frac = v / c.volume;
+    let destino = para.conteudo.find((x) => x.id === c.id);
+    if (!destino) {
+      if (para.conteudo.length >= RECIPIENTES[para.rtipo].cap) break;
+      destino = novaComida(c.id, { volume: 0, tN: c.tN, sal: 0, pimenta: 0, tec: { ...c.tec }, def: { ...c.def }, flambado: c.flambado });
+      para.conteudo.push(destino);
+    }
+    destino.tN = (destino.tN * destino.volume + c.tN * v) / (destino.volume + v);
+    destino.volume += v;
+    destino.sal += c.sal * frac; destino.pimenta += c.pimenta * frac;
+    c.sal -= c.sal * frac; c.pimenta -= c.pimenta * frac;
+    c.volume -= v;
+    if (c.volume <= 1e-3 && de.tipo === 'recipiente') remover(de, c);
+    registrarChoque(para, c, v);
+    movido += v;
+  }
+  return movido;
+}
+
 export function adicionar(r, c) {
   if (c.cat === 'tempero') return { ok: temperar(r, c.id), tempero: true };
   const cap = RECIPIENTES[r.rtipo].cap;
   if (r.conteudo.length >= cap) return { ok: false, msg: 'Não cabe mais nada aí. Física, chef. Física.' };
   if (r.rtipo === 'fritadeira' && ehLiquido(c)) return { ok: false, msg: 'Líquido na fritadeira quente? Quer conhecer os bombeiros?' };
+  registrarChoque(r, c, c.volume || 1);
   r.conteudo.push(c);
   return { ok: true };
 }
@@ -458,7 +515,7 @@ export function transferir(de, para) {
   if (!movem.length) return { ok: false, msg: 'Não tem nada pra despejar.' };
   const cap = RECIPIENTES[para.rtipo].cap;
   if (para.conteudo.length + movem.length > cap) return { ok: false, msg: 'Não cabe tudo. Vai transbordar e o Fumaça vai filmar.' };
-  for (const c of movem) { remover(de, c); para.conteudo.push(c); }
+  for (const c of movem) { remover(de, c); registrarChoque(para, c, c.volume || 1); para.conteudo.push(c); }
   return { ok: true, n: movem.length };
 }
 

@@ -119,3 +119,6 @@ table.rank td.n { text-align: right; font-weight: 700; }
 body.modo-close #mira, body.modo-close #alvo, body.modo-close #info, body.modo-close #mao { display: none !important; }
 body.modo-close #corte { top: auto; bottom: 20px; }
 body.modo-close #tela3d { cursor: crosshair; }
+body.modo-mexer #mira, body.modo-mexer #alvo, body.modo-mexer #mao { display: none !important; }
+body.modo-mexer #corte { top: auto; bottom: 20px; }
+body.modo-mexer #tela3d { cursor: grab; }

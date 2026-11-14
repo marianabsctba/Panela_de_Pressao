@@ -129,10 +129,12 @@ export function corComida(c) {
 }
 
 // Malha de uma comida no estado atual. Recria quando o corte muda.
+export const chaveComida = (c) => c.id + ":" + c.corte + (c.onde?.tipo === "rec" ? ":d" : "");
 export function malhaComida(c) {
   const d = INGREDIENTES[c.id] || PREPAROS[c.id];
   const g = new THREE.Group();
-  g.userData.chave = c.id + ':' + c.corte;
+  g.userData.chave = chaveComida(c);
+  const dentro = c.onde?.tipo === 'rec';
   const mat = new THREE.MeshStandardMaterial({ color: corComida(c), roughness: ehProteina(c) ? 0.45 : 0.55 });
   g.userData.mat = mat;
   if (c.corte && geoCorte(c.corte, c.id)) {
@@ -142,6 +144,10 @@ export function malhaComida(c) {
     else if (c.id === 'pure') { const s = new THREE.SphereGeometry(0.06, 24, 12, 0, Math.PI * 2, 0, Math.PI / 2); s.scale(1, 0.6, 1); g.add(mk(s, mat)); }
     else if (c.id === 'roux' || c.id === 'ovos_batidos') g.add(mk(new THREE.CylinderGeometry(0.075, 0.075, 0.008, 28), mat, 0, 0.004, 0));
     else g.add(mk(new THREE.CylinderGeometry(0.06, 0.07, 0.01, 28), mat, 0, 0.005, 0));
+  } else if (dentro && ['saco', 'pote', 'pote_grande'].includes(d.forma)) {
+    // Dentro da panela: o conteúdo, não a embalagem
+    const s = new THREE.SphereGeometry(0.045, 24, 10, 0, Math.PI * 2, 0, Math.PI / 2); s.scale(1, 0.45, 1);
+    g.add(mk(s, mat));
   } else if (['caixa', 'saco', 'garrafa', 'pote', 'pote_grande', 'saleiro'].includes(d.forma)) {
     g.add(embalagem(d.forma, d));
   } else if (d.forma === 'nenhuma') {

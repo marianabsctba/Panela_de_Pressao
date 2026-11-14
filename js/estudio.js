@@ -250,8 +250,8 @@ function construirMercado(L, mk, raiz, interativos, colisores) {
         L(m);
       }
     }
-    const etq = texturaTexto([d.nome, 'R$ ' + d.preco + ',00'], { w: 512, h: 160, fundo: '#f6efe0', cor: '#0b1f5c', tam: 64, fonte: 'Inter, sans-serif' });
-    const pm = mk(new THREE.PlaneGeometry(0.46, 0.14), new THREE.MeshStandardMaterial({ map: etq, roughness: 0.6 }), s.x, s.y - 0.06, s.z + s.face * 0.23, [0, s.face > 0 ? 0 : Math.PI, 0]);
+    const etq = texturaTexto([d.nome], { w: 512, h: 112, fundo: '#f6efe0', cor: '#0b1f5c', tam: 60, peso: '700', fonte: 'Inter, sans-serif', borda: '#c9992e', bordaL: 6 });
+    const pm = mk(new THREE.PlaneGeometry(0.42, 0.092), new THREE.MeshStandardMaterial({ map: etq, roughness: 0.6 }), s.x, s.y - 0.062, s.z + s.face * 0.242, [0, s.face > 0 ? 0 : Math.PI, 0]);
     pm.castShadow = false;
     raiz.add(pm);
     const h = new THREE.Mesh(new THREE.BoxGeometry(0.72, 0.36, 0.42), new THREE.MeshBasicMaterial({ visible: false }));

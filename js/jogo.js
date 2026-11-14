@@ -16,6 +16,8 @@ import { CORTES, INGREDIENTES, PREPAROS } from './dados.js';
 import { malhaFerramenta } from './objetos.js';
 import { definirAnisotropia } from './materiais.js';
 import { Corte3D } from './corte3d.js';
+import { Mexer3D } from './mexer3d.js';
+import * as K from './culinaria.js';
 
 const $ = (id) => document.getElementById(id);
 const Q = new URLSearchParams(location.search);
@@ -39,7 +41,7 @@ const estado = {
 const esperas = [];
 const esperar = (s) => new Promise((r) => esperas.push({ t: estado.tempo + s, r }));
 
-let renderer, cena, camera, composer, bloom, estudio, cozinha, jogador, efeitos, som, voz, corte3d;
+let renderer, cena, camera, composer, bloom, estudio, cozinha, jogador, efeitos, som, voz, corte3d, mexer3d;
 const personagens = {};
 const npcs = [];
 let participantes = [];
@@ -100,6 +102,7 @@ async function iniciar() {
   if (qual !== 'baixa') composer.addPass(bloom);
   composer.addPass(new OutputPass());
   corte3d = new Corte3D(renderer, camera, cena, som);
+  mexer3d = new Mexer3D(renderer, camera, cena);
   window.addEventListener('resize', ajustarTamanho);
   await passo(90, 'Compilando os sabores...');
   renderer.compile(cena, camera);
@@ -197,7 +200,7 @@ function fecharOverlay(id) { $(id).classList.add('oculto'); estado.overlay = fal
 
 function aoMudarTrava(travado) {
   if (!travado && !estado.overlay && ['anuncio', 'mercado', 'cozinha', 'maos', 'julgamento', 'eliminacao'].includes(estado.fase)) {
-    if (estado.corte?.fase === 'close') return;
+    if (estado.corte?.fase === 'close' || mexer3d.ativo) return;
     if (estado.corte) fecharCorte();
     estado.pausado = true; voz.parar();
     $('pausa').classList.remove('oculto');
@@ -222,6 +225,7 @@ function configurarEntrada() {
   window.addEventListener('keydown', (e) => {
     if (estado.overlay && overlayResolve && (e.code === 'Enter' || e.code === 'NumpadEnter')) { overlayResolve(); return; }
     if (estado.corte?.fase === 'close') { if (e.code === 'Escape') fecharCorte(); return; }
+    if (mexer3d.ativo) { teclaMexer(e); return; }
     if (estado.dialogo && jogador.travado) { if (['Enter', 'Space', 'NumpadEnter'].includes(e.code)) { e.preventDefault(); avancarDialogo(); } return; }
     if (!jogando()) return;
     if (estado.corte) { teclaCorte(e); return; }
@@ -229,7 +233,12 @@ function configurarEntrada() {
     if (e.repeat) return;
     const ent = mira?.ent;
     switch (e.code) {
-      case 'KeyE': acaoE(); break;
+      case 'KeyE': {
+        const para = podeCozinhar() && cozinha.podeVerter(ent);
+        if (para) { estado.verter = { para, ent, ponto: mira?.ponto, t: 0 }; break; }
+        acaoE(); break;
+      }
+      case 'KeyR': if (podeCozinhar()) abrirMexer(ent); break;
       case 'KeyF': if (podeCozinhar()) cozinha.acaoF(ent); break;
       case 'KeyT': if (podeCozinhar()) cozinha.provar(ent); break;
       case 'KeyG': if (podeCozinhar()) cozinha.tirarUm(cozinha.recDe(ent)); break;
@@ -253,7 +262,16 @@ function configurarEntrada() {
     if (estado.corte) return;
     acaoE();
   });
-  window.addEventListener('wheel', (e) => { if (jogando() && !estado.corte) ajustar(e.deltaY < 0 ? 1 : -1); }, { passive: true });
+  window.addEventListener('wheel', (e) => {
+    if (mexer3d.ativo) { cozinha.ajustar(mexer3d.rec, e.deltaY < 0 ? 1 : -1); return; }
+    if (jogando() && !estado.corte) ajustar(e.deltaY < 0 ? 1 : -1);
+  }, { passive: true });
+  window.addEventListener('keyup', (e) => {
+    if (e.code !== 'KeyE' || !estado.verter) return;
+    const v = estado.verter; estado.verter = null; cozinha.pararFilete();
+    if (v.t < 0.3) cozinha.interagir(v.ent, v.ponto, estado.fase);
+    else msg('Despejou aos poucos, como manda a técnica.', 'bom');
+  });
 }
 
 const podeCozinhar = () => estado.fase === 'cozinha' || (estado.fase === 'maos' && false);
@@ -285,7 +303,7 @@ function pegarProduto(id) {
   if (estado.cesta.length >= 15) return msg('Cesta cheia (15 itens). A cesta não é sua bolsa de grife.', 'ruim');
   estado.cesta.push(id);
   som.bip(660, 0.06, 'sine', 0.15);
-  msg(`Na cesta: ${d.nome} (R$ ${d.preco},00)` + (d.preco > 100 ? '. Ostentação.' : ''));
+  msg('Na cesta: ' + d.nome + (d.preco > 100 ? '. Ostentação.' : '.'));
 }
 
 function conversar(ent) {
@@ -294,6 +312,42 @@ function conversar(ent) {
     return msg(`${NOMES[ent.jurado]}: ${pick(l[ent.jurado])}`, 'npc');
   }
   msg(`${ent.p.nome}: ${pick(TX.NPC_FALAS)}`, 'npc');
+}
+
+// ---------- Mexer em close ----------
+function abrirMexer(ent) {
+  const rec = cozinha.recDe(ent) || (cozinha.mao?.tipo === 'recipiente' ? cozinha.mao : null);
+  if (!rec || !rec.obj) return msg('Mire numa panela, frigideira ou bowl pra mexer.');
+  if (!rec.conteudo.length) return msg('Mexer panela vazia é só exercício de ombro.');
+  if (rec === cozinha.mao) return msg('Ponha a panela na bancada ou no fogo pra mexer direito.');
+  const H = cozinha.mao;
+  const ferr = H?.tipo === 'ferramenta' ? H.id : null;
+  if (!ferr) msg('Mexendo sem colher nem fouet. O Jacuzzi está anotando.');
+  document.body.classList.add('modo-mexer');
+  $('corte').classList.remove('oculto'); $('corte-menu').classList.add('oculto'); $('corte-jogo').classList.remove('oculto');
+  document.querySelector('#corte .corte-barra').style.display = '';
+  $('corte-info').textContent = 'Faça círculos com o mouse. Roda: fogo. F: virar ou flambar. R ou Esc: voltar.';
+  const rapido = rec.conteudo.some((c) => ['gema', 'ovo', 'holandesa', 'maionese', 'creme_anglaise', 'beurre_blanc', 'ovos_batidos'].includes(c.id));
+  estado.faixaMexer = rapido ? [1.1, 2.6] : [0.4, 1.6];
+  mexer3d.iniciar(rec, rec.obj, ferr === 'pinca' ? 'colher' : ferr, cozinha.forcaMexer(), (forca, dt) => K.mexer(rec, forca, dt), () => {
+    document.body.classList.remove('modo-mexer');
+    $('corte').classList.add('oculto');
+    jogador.travar();
+  });
+}
+function teclaMexer(e) {
+  if (e.code === 'KeyR' || e.code === 'Escape') { mexer3d.sair(); return; }
+  if (e.code === 'KeyF') cozinha.acaoF(mexer3d.rec);
+  if (e.code === 'KeyT') cozinha.provar(mexer3d.rec);
+  if (e.code === 'KeyZ' || e.code === 'KeyX') cozinha.ajustar(mexer3d.rec, e.code === 'KeyX' ? 1 : -1);
+}
+function atualizarPainelMexer() {
+  const r = mexer3d.rec, rps = mexer3d.rps, [a, b] = estado.faixaMexer;
+  const fogo = r.onde?.tipo === 'boca' ? ' · fogo ' + r.onde.ent.nivel + '/10' : '';
+  $('corte-tit').textContent = 'Mexendo ' + r.nome.toLowerCase() + ' · ' + Math.round(r.temp) + '°C' + fogo + ' · ' + rps.toFixed(1) + ' voltas/s';
+  const z = $('corte-zona'); z.style.left = (a / 3 * 100) + '%'; z.style.width = ((b - a) / 3 * 100) + '%';
+  $('corte-agulha').style.left = Math.min(100, rps / 3 * 100) + '%';
+  const inf = $('info'); inf.innerHTML = cozinha.descrever(r).info; inf.style.display = 'block';
 }
 
 // ---------- Corte ----------
@@ -373,11 +427,16 @@ function atualizar(dt) {
   estado.tempo += dt;
   for (let i = esperas.length - 1; i >= 0; i--) if (estado.tempo >= esperas[i].t) { esperas[i].r(); esperas.splice(i, 1); }
   const mover = jogando() && !estado.corte;
-  if (corte3d.update(dt)) { if (estado.corte?.fase === 'close') $('corte-tit').textContent = `${estado.corte.d.nome}: corte ${Math.min(corte3d.feitos + 1, estado.corte.n)} de ${estado.corte.n}`; } else jogador.update(dt, mover);
+  if (mexer3d.update(dt)) atualizarPainelMexer();
+  else if (corte3d.update(dt)) { if (estado.corte?.fase === 'close') $('corte-tit').textContent = `${estado.corte.d.nome}: corte ${Math.min(corte3d.feitos + 1, estado.corte.n)} de ${estado.corte.n}`; } else jogador.update(dt, mover);
   mira = jogando() ? jogador.mirar([...cozinha.alvos, ...estudio.interativos, ...alvosExtras]) : null;
   const cozinhando = estado.fase === 'cozinha' || estado.fase === 'maos';
   jogador.mexendo = false;
-  if (cozinhando && mover && jogador.teclas.has('KeyR') && estado.fase === 'cozinha') jogador.mexendo = cozinha.mexer(mira?.ent, dt);
+  if (estado.verter) {
+    estado.verter.t += dt;
+    if (estado.fase !== 'cozinha' || !cozinha.mao) { estado.verter = null; cozinha.pararFilete(); }
+    else if (estado.verter.t >= 0.3 && cozinha.verter(estado.verter.para, dt) <= 0) { estado.verter = null; cozinha.pararFilete(); msg('Não sobrou líquido pra despejar.'); }
+  }
   if (cozinhando) cozinha.update(dt, estado.tempo, camera.position);
   if (estado.dialogo) {
     const d = estado.dialogo;
@@ -413,7 +472,7 @@ function atualizarHud() {
   // Alvo
   let nome = '', dicas = '', info = '';
   const ent = mira?.ent;
-  if (ent?.tipo === 'produto') { const d = INGREDIENTES[ent.id]; nome = `${d.nome} · R$ ${d.preco},00`; dicas = estado.fase === 'mercado' ? 'E: pôr na cesta' : 'Mercado fechado'; }
+  if (ent?.tipo === 'produto') { const d = INGREDIENTES[ent.id]; nome = d.nome; dicas = estado.fase === 'mercado' ? 'E: pôr na cesta' : 'Mercado fechado'; }
   else if (ent?.tipo === 'humano') { nome = ent.jurado ? NOMES[ent.jurado] : `${ent.p.nome}, ${ent.p.idade}`; dicas = ent.jurado ? (JURADOS.find((j) => j.id === ent.jurado)?.papel || 'apresentadora com padrão de qualidade') : ent.p.bio; }
   else if (ent?.tipo === 'camara') nome = 'Câmara fria';
   else if (ent?.tipo === 'trofeu') { nome = TX.TROFEU; dicas = 'O prêmio. Não pergunte.'; }
@@ -798,6 +857,6 @@ async function fim(venceu, r, posFinal) {
 }
 
 // Ganchos de depuração e teste
-window.__pp = { estado, get cozinha() { return cozinha; }, get jogador() { return jogador; }, get mira() { return mira; }, npcs, personagens, pular: () => { estado.relogio = 0.1; }, avancar: () => { if (estado.dialogo) { estado.dialogo.mostrado = 1e9; avancarDialogo(); return true; } if (overlayResolve) { overlayResolve(); return true; } return false; }, pegar: (id) => pegarProduto(id), acaoE: () => acaoE() };
+window.__pp = { estado, get cozinha() { return cozinha; }, get mexer3d() { return mexer3d; }, get jogador() { return jogador; }, get mira() { return mira; }, npcs, personagens, pular: () => { estado.relogio = 0.1; }, avancar: () => { if (estado.dialogo) { estado.dialogo.mostrado = 1e9; avancarDialogo(); return true; } if (overlayResolve) { overlayResolve(); return true; } return false; }, pegar: (id) => pegarProduto(id), acaoE: () => acaoE() };
 
 iniciar().catch((e) => { console.error(e); $('erro').classList.remove('oculto'); $('erro-txt').textContent = e.message; });

@@ -19,7 +19,8 @@ Depois acesse `http://localhost:8080`.
 | W A S D, Shift | andar, correr |
 | Mouse | olhar |
 | E ou clique | pegar, largar, pôr dentro, despejar, entregar |
-| R (segurar) | mexer; com o fouet na mão, bate mais forte |
+| R | mexer em close, fazendo círculos com o mouse; com o fouet na mão, bate mais forte |
+| E segurado | despejar líquido aos poucos (leite no roux sem empelotar) |
 | F | virar, flambar, enrolar a omelete, escorrer na pia |
 | T | provar e espetar o termômetro |
 | G | tirar um item sólido de dentro da panela |

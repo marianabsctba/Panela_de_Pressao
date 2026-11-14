@@ -2,7 +2,7 @@
 import * as THREE from 'three';
 import * as K from './culinaria.js';
 import { RECIPIENTES, INGREDIENTES, FERRAMENTAS, CORTES } from './dados.js';
-import { malhaComida, malhaRecipiente, malhaFerramenta, malhaDecor, arrumarConteudo, atualizarCorComida, interno } from './objetos.js';
+import { malhaComida, chaveComida, malhaRecipiente, malhaFerramenta, malhaDecor, arrumarConteudo, atualizarCorComida, interno } from './objetos.js';
 import { pecasInterativas, TOPO } from './bancada.js';
 import { M } from './materiais.js';
 
@@ -35,7 +35,7 @@ export class Cozinha {
   // ---------- Criação e posicionamento ----------
   obj(item) {
     if (item.obj) {
-      if (item.tipo === 'comida' && item.obj.userData.chave !== item.id + ':' + item.corte) {
+      if (item.tipo === 'comida' && item.obj.userData.chave !== chaveComida(item)) {
         const velho = item.obj; const pai = velho.parent;
         const novo = malhaComida(item); novo.position.copy(velho.position); novo.rotation.copy(velho.rotation);
         if (pai) { pai.remove(velho); pai.add(novo); }
@@ -266,6 +266,48 @@ export class Cozinha {
       }
       return this.msg('Os dois estão vazios. Que momento.');
     }
+  }
+
+  // ---------- Verter aos poucos ----------
+  podeVerter(ent) {
+    const H = this.mao;
+    if (!H) return null;
+    const para = this.recDe(ent);
+    if (!para || para === H || RECIPIENTES[para.rtipo].oleo) return null;
+    const temLiquido = H.tipo === 'recipiente' ? H.conteudo.some((c) => K.ehLiquido(c)) : (H.tipo === 'comida' && K.ehLiquido(H) && H.cat !== 'tempero');
+    return temLiquido ? para : null;
+  }
+
+  verter(para, dt) {
+    const H = this.mao;
+    if (!H) return 0;
+    const v = K.verterPorcao(H, para, dt * 0.35);
+    this.marcar(para); if (H.tipo === 'recipiente') this.marcar(H);
+    if (H.tipo === 'comida' && H.volume <= 1e-3) { this.descartar(H); this.msg('A embalagem acabou. Foi tudo pra panela.'); }
+    // Filete de líquido e recipiente inclinado
+    if (!this.filete) {
+      this.filete = new THREE.Mesh(new THREE.CylinderGeometry(0.005, 0.007, 1, 10, 1, true), new THREE.MeshPhysicalMaterial({ color: 0xffffff, roughness: 0.1, transparent: true, opacity: 0.85 }));
+      this.filete.castShadow = false; this.cena.add(this.filete);
+    }
+    const fonte = H.tipo === 'recipiente' ? H.conteudo.find((c) => K.ehLiquido(c)) : H;
+    if (v > 0 && fonte && para.obj && H.obj) {
+      const a = H.obj.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, 0.04, 0));
+      const b = para.obj.getWorldPosition(new THREE.Vector3()).add(new THREE.Vector3(0, interno(para.rtipo).fundo + 0.02, 0));
+      const meio = a.clone().add(b).multiplyScalar(0.5);
+      this.filete.position.copy(meio);
+      this.filete.scale.set(1, a.distanceTo(b), 1);
+      this.filete.quaternion.setFromUnitVectors(new THREE.Vector3(0, 1, 0), a.clone().sub(b).normalize());
+      this.filete.material.color.setHex((K.defDe(fonte.id) || {}).cor ?? 0xffffff);
+      this.filete.visible = true;
+      H.obj.rotation.z = -0.9;
+      this.som.nivel(this.som.borbulha, 0.15);
+    } else this.pararFilete();
+    return v;
+  }
+
+  pararFilete() {
+    if (this.filete) this.filete.visible = false;
+    if (this.mao?.obj) this.mao.obj.rotation.z = 0;
   }
 
   // G: tira um item sólido de dentro do recipiente para a mão
